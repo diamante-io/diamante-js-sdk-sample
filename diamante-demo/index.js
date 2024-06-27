@@ -5,7 +5,8 @@ const {
     Keypair,
     TransactionBuilder,
     Operation,
-    Networks
+    Networks,
+    Asset
 } = require('diamante-base');
 const { Horizon } = require('diamante-sdk-js');
 
