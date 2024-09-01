@@ -1,20 +1,14 @@
 [
   {
-    "id": 0,
-    "title": "swedrfgh",
-    "description": "wertyui",
-    "budget": "567",
-    "clientPublicKey": "qwertyuiopasdfghjkl",
-    "accepted": false,
-    "status": "open"
+    "title": "Blockchain",
+    "description": "make website",
+    "budget": "5",
+    "publicKey": "asdfghjklwertyuiopcfvgbhjkl"
   },
   {
-    "id": 1,
-    "title": "swedrfgh",
-    "description": "wertyui",
-    "budget": "567",
-    "clientPublicKey": "qwertyuiopasdfghjkl",
-    "accepted": false,
-    "status": "open"
+    "title": "Blockchain2",
+    "description": "make website123",
+    "budget": "6",
+    "publicKey": "asdfghjklwertyuiopcfvgbhjkl"
   }
 ]

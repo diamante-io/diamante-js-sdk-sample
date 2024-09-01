@@ -2,114 +2,201 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const fs = require('fs');
+const path = require('path');
 const { Keypair, TransactionBuilder, Operation, Networks, Asset } = require('diamante-base');
 const { Horizon } = require('diamante-sdk-js');
 
 const app = express();
-const port = 3000;
+const port = 3001;
 
 app.use(bodyParser.json());
 app.use(cors());
 
-// Load data from JSON files
-const loadJobs = () => JSON.parse(fs.readFileSync('jobs.json', 'utf-8'));
-const saveJobs = (jobs) => fs.writeFileSync('jobs.json', JSON.stringify(jobs, null, 2));
+const jobsFilePath = path.join(__dirname, 'jobs.json');
+const usersFilePath = path.join(__dirname, 'users.json');
+
+// Helper functions for file operations
+function readDataFromFile(filePath) {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8') || '[]');
+}
+
+function writeDataToFile(filePath, data) {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+}
+
+// Diamante Keypair creation
+app.post('/create-keypair', (req, res) => {
+    try {
+        const keypair = Keypair.random();
+        res.json({
+            publicKey: keypair.publicKey(),
+            secret: keypair.secret()
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Fund account using Diamante Friendbot
+app.post('/fund-account', async (req, res) => {
+    try {
+        const { publicKey } = req.body;
+        const fetch = await import('node-fetch').then(mod => mod.default);
+        const response = await fetch(`https://friendbot.diamcircle.io/?addr=${publicKey}`);
+        const result = await response.json();
+        res.json({ message: `Account ${publicKey} funded successfully` });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// User registration
+app.post('/register-user', (req, res) => {
+    const { publicKey, username } = req.body;
+    const users = readDataFromFile(usersFilePath);
+
+    if (users.some(user => user.publicKey === publicKey)) {
+        return res.status(400).json({ message: 'User already exists' });
+    }
+
+    users.push({ publicKey, username });
+    writeDataToFile(usersFilePath, users);
+
+    res.json({ message: 'User registered successfully' });
+});
+
+// Job creation
+app.post('/create-job', (req, res) => {
+    const { title, description, budget, publicKey } = req.body;
+    const jobs = readDataFromFile(jobsFilePath);
+
+    jobs.push({ title, description, budget, publicKey });
+    writeDataToFile(jobsFilePath, jobs);
+
+    res.json({ message: 'Job created successfully' });
+});
+
+// Get all jobs
 app.get('/jobs', (req, res) => {
-    const jobs = loadJobs();
+    const jobs = readDataFromFile(jobsFilePath);
     res.json(jobs);
 });
 
+// Make payment between users
+app.post('/make-payment', async (req, res) => {
+    try {
+        const { senderSecret, receiverPublicKey, amount } = req.body;
 
-// Load users from JSON
-const loadUsers = () => JSON.parse(fs.readFileSync('users.json', 'utf-8'));
-const saveUsers = (users) => fs.writeFileSync('users.json', JSON.stringify(users, null, 2));
-
-// Endpoint to create a job
-app.post('/create-job', (req, res) => {
-    const { title, description, budget, publicKey } = req.body;
-    const jobs = loadJobs();
-    const newJob = {
-        id: jobs.length,
-        title,
-        description,
-        budget,
-        clientPublicKey: publicKey,
-        accepted: false,
-        status: 'open',
-    };
-    jobs.push(newJob);
-    saveJobs(jobs);
-    res.json({ message: 'Job created successfully!', jobId: newJob.id });
-});
-
-// Endpoint to accept a job
-app.post('/accept-job', (req, res) => {
-    const { jobId, freelancerPublicKey } = req.body;
-    const jobs = loadJobs();
-    if (jobs[jobId] && jobs[jobId].status === 'open') {
-        jobs[jobId].accepted = true;
-        jobs[jobId].freelancerPublicKey = freelancerPublicKey;
-        jobs[jobId].status = 'accepted';
-        saveJobs(jobs);
-        res.json({ message: 'Job accepted successfully!' });
-    } else {
-        res.status(404).json({ error: 'Job not found or already accepted!' });
-    }
-});
-
-// Endpoint to submit completed work
-app.post('/submit-job', (req, res) => {
-    const { jobId, freelancerPublicKey, submissionDetails } = req.body;
-    const jobs = loadJobs();
-    const job = jobs.find(job => job.id === jobId && job.freelancerPublicKey === freelancerPublicKey);
-
-    if (!job || job.status !== 'accepted') {
-        return res.status(404).json({ error: "Job not found or not accepted by this freelancer" });
-    }
-
-    job.submission = submissionDetails;
-    job.status = 'submitted';
-    saveJobs(jobs);
-    res.json({ message: "Job submitted successfully" });
-});
-
-// Endpoint to review and complete the job
-app.post('/review-job', async (req, res) => {
-    const { jobId, clientSecret } = req.body;
-    const jobs = loadJobs();
-    const job = jobs[jobId];
-
-    if (!job || job.clientPublicKey !== Keypair.fromSecret(clientSecret).publicKey() || job.status !== 'submitted') {
-        return res.status(404).json({ message: "Job not found, not owned by this client, or not yet submitted" });
-    }
-
-    job.status = 'completed';
-    saveJobs(jobs);
-    await makePayment(clientSecret, job.freelancerPublicKey, job.budget);
-    res.json({ message: "Job completed and payment made successfully" });
-});
-
-// Function to make payment
-const makePayment = async (senderSecret, receiverPublicKey, amount) => {
-    const server = new Horizon.Server('https://diamtestnet.diamcircle.io/');
-    const senderKeypair = Keypair.fromSecret(senderSecret);
-    const transaction = new TransactionBuilder(await server.loadAccount(senderKeypair.publicKey()), {
-        fee: await server.fetchBaseFee(),
-        networkPassphrase: Networks.TESTNET,
-    })
+        const server = new Horizon.Server('https://diamtestnet.diamcircle.io/');
+        const senderKeypair = Keypair.fromSecret(senderSecret);
+        const account = await server.loadAccount(senderKeypair.publicKey());
+        
+        const transaction = new TransactionBuilder(account, {
+            fee: await server.fetchBaseFee(),
+            networkPassphrase: Networks.TESTNET,
+        })
         .addOperation(Operation.payment({
             destination: receiverPublicKey,
             asset: Asset.native(),
-            amount: amount.toString(),
+            amount: amount,
         }))
         .setTimeout(30)
         .build();
 
-    transaction.sign(senderKeypair);
-    return await server.submitTransaction(transaction);
-};
+        transaction.sign(senderKeypair);
+        const result = await server.submitTransaction(transaction);
+        res.json({ message: `Payment of ${amount} DIAM made to ${receiverPublicKey} successfully` });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 
-// Start server
+// Manage account data (store key-value pairs)
+app.post('/manage-data', async (req, res) => {
+    try {
+        const { senderSecret, key, value } = req.body;
+
+        const server = new Horizon.Server('https://diamtestnet.diamcircle.io/');
+        const senderKeypair = Keypair.fromSecret(senderSecret);
+        const account = await server.loadAccount(senderKeypair.publicKey());
+        
+        const transaction = new TransactionBuilder(account, {
+            fee: await server.fetchBaseFee(),
+            networkPassphrase: Networks.TESTNET,
+        })
+        .addOperation(Operation.manageData({
+            name: key,
+            value: value || null,
+        }))
+        .setTimeout(30)
+        .build();
+
+        transaction.sign(senderKeypair);
+        const result = await server.submitTransaction(transaction);
+        res.json({ message: `Data for key ${key} managed successfully` });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Set account options
+app.post('/set-options', async (req, res) => {
+    try {
+        const { senderSecret, inflationDest, homeDomain, lowThreshold, medThreshold, highThreshold } = req.body;
+
+        const server = new Horizon.Server('https://diamtestnet.diamcircle.io/');
+        const senderKeypair = Keypair.fromSecret(senderSecret);
+        const account = await server.loadAccount(senderKeypair.publicKey());
+        
+        const transaction = new TransactionBuilder(account, {
+            fee: await server.fetchBaseFee(),
+            networkPassphrase: Networks.TESTNET,
+        })
+        .addOperation(Operation.setOptions({
+            inflationDest: inflationDest || undefined,
+            homeDomain: homeDomain || undefined,
+            lowThreshold: lowThreshold ? parseInt(lowThreshold) : undefined,
+            medThreshold: medThreshold ? parseInt(medThreshold) : undefined,
+            highThreshold: highThreshold ? parseInt(highThreshold) : undefined,
+        }))
+        .setTimeout(30)
+        .build();
+
+        transaction.sign(senderKeypair);
+        const result = await server.submitTransaction(transaction);
+        res.json({ message: 'Options set successfully' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Accept a job
+app.post('/accept-job', (req, res) => {
+    const { jobTitle, userPublicKey } = req.body;
+    const jobs = readDataFromFile(jobsFilePath);
+
+    // Find the job
+    const jobIndex = jobs.findIndex(job => job.title === jobTitle);
+
+    if (jobIndex === -1) {
+        return res.status(404).json({ message: 'Job not found' });
+    }
+
+    // Check if the job is already accepted
+    if (jobs[jobIndex].status === 'accepted') {
+        return res.status(400).json({ message: 'Job is already accepted' });
+    }
+
+    // Update the job status and assign it to the user
+    jobs[jobIndex].status = 'accepted';
+    jobs[jobIndex].acceptedBy = userPublicKey;
+    writeDataToFile(jobsFilePath, jobs);
+
+    res.json({ message: `Job ${jobTitle} accepted successfully` });
+});
+
+
+// Start the server
 app.listen(port, () => {
-    console.log(`Backend running at http://localhost:${port}`);
+    console.log(`Diamante backend listening at http://localhost:${port}`);
 });
