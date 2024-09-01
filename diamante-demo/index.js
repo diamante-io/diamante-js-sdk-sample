@@ -1,150 +1,115 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const {
-    Keypair,
-    TransactionBuilder,
-    Operation,
-    Networks
-} = require('diamante-base');
+const fs = require('fs');
+const { Keypair, TransactionBuilder, Operation, Networks, Asset } = require('diamante-base');
 const { Horizon } = require('diamante-sdk-js');
 
 const app = express();
-const port = 3001;
+const port = 3000;
 
 app.use(bodyParser.json());
 app.use(cors());
 
-app.post('/create-keypair', (req, res) => {
-    try {
-        console.log('Received request to create keypair');
-        const keypair = Keypair.random();
-        console.log('Keypair created:', keypair.publicKey(), keypair.secret());
-        res.json({
-            publicKey: keypair.publicKey(),
-            secret: keypair.secret()
-        });
-    } catch (error) {
-        console.error('Error in create-keypair:', error);
-        res.status(500).json({ error: error.message });
+// Load data from JSON files
+const loadJobs = () => JSON.parse(fs.readFileSync('jobs.json', 'utf-8'));
+const saveJobs = (jobs) => fs.writeFileSync('jobs.json', JSON.stringify(jobs, null, 2));
+app.get('/jobs', (req, res) => {
+    const jobs = loadJobs();
+    res.json(jobs);
+});
+
+
+// Load users from JSON
+const loadUsers = () => JSON.parse(fs.readFileSync('users.json', 'utf-8'));
+const saveUsers = (users) => fs.writeFileSync('users.json', JSON.stringify(users, null, 2));
+
+// Endpoint to create a job
+app.post('/create-job', (req, res) => {
+    const { title, description, budget, publicKey } = req.body;
+    const jobs = loadJobs();
+    const newJob = {
+        id: jobs.length,
+        title,
+        description,
+        budget,
+        clientPublicKey: publicKey,
+        accepted: false,
+        status: 'open',
+    };
+    jobs.push(newJob);
+    saveJobs(jobs);
+    res.json({ message: 'Job created successfully!', jobId: newJob.id });
+});
+
+// Endpoint to accept a job
+app.post('/accept-job', (req, res) => {
+    const { jobId, freelancerPublicKey } = req.body;
+    const jobs = loadJobs();
+    if (jobs[jobId] && jobs[jobId].status === 'open') {
+        jobs[jobId].accepted = true;
+        jobs[jobId].freelancerPublicKey = freelancerPublicKey;
+        jobs[jobId].status = 'accepted';
+        saveJobs(jobs);
+        res.json({ message: 'Job accepted successfully!' });
+    } else {
+        res.status(404).json({ error: 'Job not found or already accepted!' });
     }
 });
 
-app.post('/fund-account', async (req, res) => {
-    try {
-        const { publicKey } = req.body;
-        console.log(`Received request to fund account ${publicKey}`);
-        const fetch = await import('node-fetch').then(mod => mod.default);
-        const response = await fetch(`https://friendbot.diamcircle.io/?addr=${publicKey}`);
-        if (!response.ok) {
-            throw new Error(`Failed to activate account ${publicKey}: ${response.statusText}`);
-        }
-        const result = await response.json();
-        console.log(`Account ${publicKey} activated`, result);
-        res.json({ message: `Account ${publicKey} funded successfully` });
-    } catch (error) {
-        console.error('Error in fund-account:', error);
-        res.status(500).json({ error: error.message });
+// Endpoint to submit completed work
+app.post('/submit-job', (req, res) => {
+    const { jobId, freelancerPublicKey, submissionDetails } = req.body;
+    const jobs = loadJobs();
+    const job = jobs.find(job => job.id === jobId && job.freelancerPublicKey === freelancerPublicKey);
+
+    if (!job || job.status !== 'accepted') {
+        return res.status(404).json({ error: "Job not found or not accepted by this freelancer" });
     }
+
+    job.submission = submissionDetails;
+    job.status = 'submitted';
+    saveJobs(jobs);
+    res.json({ message: "Job submitted successfully" });
 });
 
-app.post('/make-payment', async (req, res) => {
-    try {
-        const { senderSecret, receiverPublicKey, amount } = req.body;
-        console.log(`Received request to make payment from ${senderSecret} to ${receiverPublicKey} with amount ${amount}`);
+// Endpoint to review and complete the job
+app.post('/review-job', async (req, res) => {
+    const { jobId, clientSecret } = req.body;
+    const jobs = loadJobs();
+    const job = jobs[jobId];
 
-        const server = new Horizon.Server('https://diamtestnet.diamcircle.io/');
-        const senderKeypair = Keypair.fromSecret(senderSecret);
-        const senderPublicKey = senderKeypair.publicKey();
-
-        const account = await server.loadAccount(senderPublicKey);
-        const transaction = new TransactionBuilder(account, {
-            fee: await server.fetchBaseFee(),
-            networkPassphrase: Networks.TESTNET,
-        })
-            .addOperation(Operation.payment({
-                destination: receiverPublicKey,
-                asset: Asset.native(),
-                amount: amount,
-            }))
-            .setTimeout(30)
-            .build();
-
-        transaction.sign(senderKeypair);
-        const result = await server.submitTransaction(transaction);
-        console.log(`Payment made from ${senderPublicKey} to ${receiverPublicKey} with amount ${amount}`, result);
-        res.json({ message: `Payment of ${amount} DIAM made to ${receiverPublicKey} successfully` });
-    } catch (error) {
-        console.error('Error in make-payment:', error);
-        res.status(500).json({ error: error.message });
+    if (!job || job.clientPublicKey !== Keypair.fromSecret(clientSecret).publicKey() || job.status !== 'submitted') {
+        return res.status(404).json({ message: "Job not found, not owned by this client, or not yet submitted" });
     }
+
+    job.status = 'completed';
+    saveJobs(jobs);
+    await makePayment(clientSecret, job.freelancerPublicKey, job.budget);
+    res.json({ message: "Job completed and payment made successfully" });
 });
 
-app.post('/manage-data', async (req, res) => {
-    try {
-        const { senderSecret, key, value } = req.body;
-        console.log(`Received request to manage data for key ${key} with value ${value}`);
+// Function to make payment
+const makePayment = async (senderSecret, receiverPublicKey, amount) => {
+    const server = new Horizon.Server('https://diamtestnet.diamcircle.io/');
+    const senderKeypair = Keypair.fromSecret(senderSecret);
+    const transaction = new TransactionBuilder(await server.loadAccount(senderKeypair.publicKey()), {
+        fee: await server.fetchBaseFee(),
+        networkPassphrase: Networks.TESTNET,
+    })
+        .addOperation(Operation.payment({
+            destination: receiverPublicKey,
+            asset: Asset.native(),
+            amount: amount.toString(),
+        }))
+        .setTimeout(30)
+        .build();
 
-        const server = new Horizon.Server('https://diamtestnet.diamcircle.io/');
-        const senderKeypair = Keypair.fromSecret(senderSecret);
-        const senderPublicKey = senderKeypair.publicKey();
+    transaction.sign(senderKeypair);
+    return await server.submitTransaction(transaction);
+};
 
-        const account = await server.loadAccount(senderPublicKey);
-        const transaction = new TransactionBuilder(account, {
-            fee: await server.fetchBaseFee(),
-            networkPassphrase: Networks.TESTNET,
-        })
-            .addOperation(Operation.manageData({
-                name: key,
-                value: value || null,
-            }))
-            .setTimeout(30)
-            .build();
-
-        transaction.sign(senderKeypair);
-        const result = await server.submitTransaction(transaction);
-        console.log(`Data managed for key ${key} with value ${value}`, result);
-        res.json({ message: `Data for key ${key} managed successfully` });
-    } catch (error) {
-        console.error('Error in manage-data:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-app.post('/set-options', async (req, res) => {
-    try {
-        const { senderSecret, inflationDest, homeDomain, lowThreshold, medThreshold, highThreshold } = req.body;
-        console.log(`Received request to set options with inflationDest: ${inflationDest}, homeDomain: ${homeDomain}, thresholds: ${lowThreshold}, ${medThreshold}, ${highThreshold}`);
-
-        const server = new Horizon.Server('https://diamtestnet.diamcircle.io/');
-        const senderKeypair = Keypair.fromSecret(senderSecret);
-        const senderPublicKey = senderKeypair.publicKey();
-
-        const account = await server.loadAccount(senderPublicKey);
-        const transaction = new TransactionBuilder(account, {
-            fee: await server.fetchBaseFee(),
-            networkPassphrase: Networks.TESTNET,
-        })
-            .addOperation(Operation.setOptions({
-                inflationDest: inflationDest || undefined,
-                homeDomain: homeDomain || undefined,
-                lowThreshold: lowThreshold ? parseInt(lowThreshold) : undefined,
-                medThreshold: medThreshold ? parseInt(medThreshold) : undefined,
-                highThreshold: highThreshold ? parseInt(highThreshold) : undefined,
-            }))
-            .setTimeout(30)
-            .build();
-
-        transaction.sign(senderKeypair);
-        const result = await server.submitTransaction(transaction);
-        console.log('Options set successfully:', result);
-        res.json({ message: 'Options set successfully' });
-    } catch (error) {
-        console.error('Error in set-options:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
+// Start server
 app.listen(port, () => {
-    console.log(`Diamante backend listening at http://localhost:${port}`);
+    console.log(`Backend running at http://localhost:${port}`);
 });
