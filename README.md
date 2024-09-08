@@ -1,184 +1,77 @@
-# Diamante Network Operations
+# Decentralized Freelancing Platform
 
-This project demonstrates the use of the Diamante SDK to perform various operations on the Diamante blockchain network, including creating accounts, making payments, managing data, and setting options.
+## Overview
 
-## Table of Contents
+This project is a decentralized freelancing platform built using React for the frontend and Express for the backend. The platform allows users to register, create jobs, and accept jobs. It uses the Diamante blockchain for managing user accounts and transactions.
 
-- [Backend](#backend)
-  - [Installation](#installation)
-  - [Running the Project](#running-the-project)
-  - [Endpoints](#endpoints)
-    - [Create Keypair](#create-keypair)
-    - [Fund Account](#fund-account)
-    - [Make Payment](#make-payment)
-    - [Manage Data](#manage-data)
-    - [Set Options](#set-options)
-- [Frontend](#frontend)
-  - [Installation](#installation-1)
-  - [Running the Project](#running-the-project-1)
-  - [Features](#features)
-    - [Create Account](#create-account)
-    - [Payments](#payments)
-    - [Manage Data](#manage-data-1)
-    - [Set Options](#set-options)
-- [License](#license)
+## Features
 
-## Backend
+- **User Registration**: Users can register with a username and a public key.
+- **Job Creation**: Registered users can create job postings with a title, description, and budget.
+- **Job Acceptance**: Users can accept available jobs if they haven't been accepted yet.
+- **Data Management**: Utilizes Diamante blockchain for keypair generation, account funding, and data management.
 
-### Installation
+## Prerequisites
 
-To set up the backend, follow these steps:
+- Node.js and npm installed on your machine.
+- Diamante SDK for blockchain operations.
 
-1. Clone the repository:
+## API Endpoints
+POST /create-keypair
+Generates a new Diamante keypair.
 
-    ```bash
-    git clone https://github.com/diamcircle/diamante-js-sdk-sample
-    ```
+Response:
 
-2. Navigate to the backend directory and install dependencies:
+publicKey: The generated public key.
+secret: The generated secret key.
+POST /fund-account
+Funds a Diamante account using the Friendbot.
 
-    ```bash
-    cd diamante-js-sdk-sample/diamante-demo
-    npm install
-    ```
+Request Body:
 
-### Running the Project
+publicKey: The public key of the account to fund.
+Response:
 
-Start the backend server:
+message: Confirmation message.
+POST /register-user
+Registers a new user with a username and public key.
 
-```bash
-node index.js
+Request Body:
 
-```
-The backend server will be running at http://localhost:3001.
+username: The username of the user.
+publicKey: The public key of the user.
+Response:
 
-## Endpoints
+message: Confirmation message.
+POST /create-job
+Creates a new job posting.
 
-### Create Keypair
+Request Body:
 
-- **Endpoint**: `/create-keypair`
-- **Method**: `POST`
-- **Description**: Generates a new keypair.
-- **Response**:
-  ```json
-  {
-    "publicKey": "GCPH3KD3HEEWVBH4TH4RCV7RM5SRSKRTTX0FQQF6EK3QDFSWM73LYXUD",
-    "secret": "SDYIM7HJCJVTRWFC7W3YN2WTIIY7FOZZXM7UCNGGIG47JAAIKV6EF3Y"
-  }
+title: The title of the job.
+description: The description of the job.
+budget: The budget for the job.
+publicKey: The public key of the user creating the job.
+Response:
 
-### Fund Account
-- **Endpoint**: /fund-account
-- **Method**: POST
-- **Description**: Funds the account using Friendbot.
-- **Request**:
-```json
-{"publicKey": "GCPH3KD3HEEWVBH4TH4RCV7RM5SRSKRTTX0FQQF6EK3QDFSWM73LYXUD"
-}
-```
-- **Response**:
-```json
-{
-  "message": "Account GCPH3KD3HEEWVBH4TH4RCV7RM5SRSKRTTX0FQQF6EK3QDFSWM73LYXUD funded successfully"
-}
-```
-### Make Payment
-- **Endpoint**: /make-payment
-- **Method**: POST
-- **Description**: Makes a payment from one account to another.
-- **Request**:
-```json
-{
-  "senderSecret": "SDYIM7HJCJVTRWFC7W3YN2WTIIY7FOZZXM7UCNGGIG47JAAIKV6EF3Y",
-  "receiverPublicKey": "GCPH3KD3HEEWVBH4TH4RCV7RM5SRSKRTTX0FQQF6EK3QDFSWM73LYXUD",
-  "amount": "10"
-}
-```
+message: Confirmation message.
+GET /jobs
+Retrieves all job postings.
 
-- **Response**:
-```json
-{
-  "message": "Payment of 10 DIAM made to GCPH3KD3HEEWVBH4TH4RCV7RM5SRSKRTTX0FQQF6EK3QDFSWM73LYXUD successfully"
-}
-```
+Response:
 
-### Manage Data
-- **Endpoint**: /manage-data
-- **Method**: POST
-- **Description**: Sets or deletes a key-value pair on an account.
-- **Request**:
-```json
-{
-  "senderSecret": "SDYIM7HJCJVTRWFC7W3YN2WTIIY7FOZZXM7UCNGGIG47JAAIKV6EF3Y",
-  "key": "example_key",
-  "value": "example_value"
-}
-```
+jobs: An array of job objects.
+POST /accept-job
+Accepts a job posting.
 
-- **Response**:
-```json
-{
-  "message": "Data for key example_key managed successfully"
-}
-```
+Request Body:
 
-####  Set Options
-- **Endpoint**: /set-options
-- **Method**: POST
-- **Description**: Sets various account options.
-- **Request**:
-```json
-{
-  "senderSecret": "SDYIM7HJCJVTRWFC7W3YN2WTIIY7FOZZXM7UCNGGIG47JAAIKV6EF3Y",
-  "inflationDest": "GCPH3KD3HEEWVBH4TH4RCV7RM5SRSKRTTX0FQQF6EK3QDFSWM73LYXUD",
-  "homeDomain": "example.com",
-  "lowThreshold": "1",
-  "medThreshold": "2",
-  "highThreshold": "3"
-}
-```
-- **Response**:
-```json
-{
-  "message": "Options set successfully"
-}
-```
+jobTitle: The title of the job to accept.
+userPublicKey: The public key of the user accepting the job.
+Response:
 
-## Frontend
-
-### Installation
-
-To set up the frontend, follow these steps:
-
-Navigate to the frontend directory and install dependencies:
-```bash
-cd diamante-js-sdk-sample/front
-npm install
-```
-### Running the Project
-Start the frontend development server:
-
-```bash
-npm start
-```
-Open your browser and navigate to http://localhost:3000.
-
-### Features
-- Create Account
-Navigate to the "Create Account" page.
-Click "Generate Keypair" to create a new keypair.
-Click "Get Test DIAM" to fund the account using Friendbot.
-
-- Payments
-Navigate to the "Payments" page.
-Enter the sender's secret key, receiver's public key, and amount.
-Click "Make Payment" to initiate the transaction.
-
-- Manage Data
-Navigate to the "Manage Data" page.
-Enter the sender's secret key, key, and value.
-Click "Manage Data" to set or delete the key-value pair.
-
-- Set Options
-Navigate to the "Set Options" page.
-Enter the sender's secret key, inflation destination, home domain, and thresholds.
-Click "Set Options" to update the account options.
+message: Confirmation message.
+Usage
+Register a User: Enter a username and public key, then click "Register".
+Create a Job: Enter job details (title, description, budget) and click "Create Job".
+Accept a Job: Click "Accept Job" for the job you want to accept, then confirm by clicking "Confirm Acceptance".

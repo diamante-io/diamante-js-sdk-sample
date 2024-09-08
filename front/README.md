@@ -1,42 +1,77 @@
-# Diamante Network Operations Frontend
+# Decentralized Freelancing Platform
 
-This project provides a frontend interface for interacting with the Diamante Network Operations backend. It allows users to create accounts, make payments, manage data, and set options on the Diamante blockchain network.
+## Overview
 
-## Installation
+This project is a decentralized freelancing platform built using React for the frontend and Express for the backend. The platform allows users to register, create jobs, and accept jobs. It uses the Diamante blockchain for managing user accounts and transactions.
 
-To set up the frontend, follow these steps:
+## Features
 
-1. Navigate to the frontend directory and install dependencies:
-   
-   cd diamante-network-operations/diamante-frontend
-   npm install
+- **User Registration**: Users can register with a username and a public key.
+- **Job Creation**: Registered users can create job postings with a title, description, and budget.
+- **Job Acceptance**: Users can accept available jobs if they haven't been accepted yet.
+- **Data Management**: Utilizes Diamante blockchain for keypair generation, account funding, and data management.
 
-##  Running the Project
-Start the frontend development server:
+## Prerequisites
 
-npm start
-Open your browser and navigate to http://localhost:3000.
+- Node.js and npm installed on your machine.
+- Diamante SDK for blockchain operations.
 
-##  Features
-Create Account
-Navigate to the "Create Account" page.
-Click "Generate Keypair" to create a new keypair.
-Click "Get Test DIAM" to fund the account using Friendbot.
+## API Endpoints
+POST /create-keypair
+Generates a new Diamante keypair.
 
-Payments
-Navigate to the "Payments" page.
-Enter the sender's secret key, receiver's public key, and amount.
-Click "Make Payment" to initiate the transaction.
+Response:
 
-Manage Data
-Navigate to the "Manage Data" page.
-Enter the sender's secret key, key, and value.
-Click "Manage Data" to set or delete the key-value pair.
+publicKey: The generated public key.
+secret: The generated secret key.
+POST /fund-account
+Funds a Diamante account using the Friendbot.
 
-Set Options
-Navigate to the "Set Options" page.
-Enter the sender's secret key, inflation destination, home domain, and thresholds.
-Click "Set Options" to update the account options.
+Request Body:
 
-##  License
-This project is licensed under the MIT License.
+publicKey: The public key of the account to fund.
+Response:
+
+message: Confirmation message.
+POST /register-user
+Registers a new user with a username and public key.
+
+Request Body:
+
+username: The username of the user.
+publicKey: The public key of the user.
+Response:
+
+message: Confirmation message.
+POST /create-job
+Creates a new job posting.
+
+Request Body:
+
+title: The title of the job.
+description: The description of the job.
+budget: The budget for the job.
+publicKey: The public key of the user creating the job.
+Response:
+
+message: Confirmation message.
+GET /jobs
+Retrieves all job postings.
+
+Response:
+
+jobs: An array of job objects.
+POST /accept-job
+Accepts a job posting.
+
+Request Body:
+
+jobTitle: The title of the job to accept.
+userPublicKey: The public key of the user accepting the job.
+Response:
+
+message: Confirmation message.
+Usage
+Register a User: Enter a username and public key, then click "Register".
+Create a Job: Enter job details (title, description, budget) and click "Create Job".
+Accept a Job: Click "Accept Job" for the job you want to accept, then confirm by clicking "Confirm Acceptance".
